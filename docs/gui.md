@@ -265,7 +265,7 @@ position, and can remove that dependence.
 **The model.** Inside the coincidence window the corrected electron position is
 
 $$
-\mathbf r_\mathrm{corr} \;=\; \mathbf r_e \;-\; M\,\mathbf r_n \;-\; f(\tau) \;-\; \mathbf d ,
+\mathbf r_\mathrm{corr} = \mathbf r_e - M\,\mathbf r_n - f(\tau) - \mathbf d ,
 $$
 
 where $\mathbf r_e$ is the electron hit position, $\mathbf r_n$ the neutral hit position (coupled through the $2\times2$
@@ -478,7 +478,7 @@ inversion linear, so a bootstrap costs the same as before; non-negativity makes 
 **Maximum entropy.** Adds the penalty
 
 $$
-\alpha^2 F^2 \sum w\; s\!\left(\frac{f}{F}\right), \qquad s(x) = x\ln\frac{x}{m} - x + m ,
+\alpha^2 F^2 \sum w s\!\left(\frac{f}{F}\right), \qquad s(x) = x\ln\frac{x}{m} - x + m ,
 $$
 
 the entropy of a positive additive distribution, on the angular distribution $f$ at every radius and 16 angles. $F$ is its
