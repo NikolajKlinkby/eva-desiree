@@ -1,6 +1,4 @@
-/live/**
 **/__pycache__/**
-**/circularisation.json
 *.log
 *.run*
 *.toc
@@ -19,3 +17,4 @@
 *.hdf5
 *.h5.part
 examples/output/
+*.json
