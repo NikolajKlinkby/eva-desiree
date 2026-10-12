@@ -1,0 +1,5 @@
+numpy
+scipy
+PyQt6
+pyqtgraph
+h5py

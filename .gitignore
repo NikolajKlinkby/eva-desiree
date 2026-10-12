@@ -1,0 +1,21 @@
+/live/**
+**/__pycache__/**
+**/circularisation.json
+*.log
+*.run*
+*.toc
+*.aux
+*.bbl
+*.blg
+*.brf
+*.idx
+*.ilg
+*.ind
+*.lof
+*.lot
+*.out
+# analysis files written by the program
+*.h5
+*.hdf5
+*.h5.part
+examples/output/

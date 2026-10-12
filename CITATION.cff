@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "EVA: Electron–neutral VMI Analysis"
+type: software
+authors:
+  - family-names: Klinkby
+    given-names: Nikolaj
+repository-code: "https://github.com/NikolajKlinkby/eva-desiree"
+license: MIT
+date-released: 2026-10-12
+abstract: "Live and offline analysis of velocity-map-imaging data from an MCP with resistive anode encoder: coincidences, centring, Abel inversion (rBASEX), bootstrap errors."
