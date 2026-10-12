@@ -142,7 +142,7 @@ notation, so formulas and code can be read side by side:
 | $d_{nr}$, radially binned data | `d[n, r]`, from `RadialBinner.d(weights)` |
 | $H_{rni}$, inverse Hankel matrix per radius | `AbelBasis.H[r, n, i]` (`hankel_matrix` gives the Hankel part `K`) |
 | $p_n^{T}$, $(p_n^{T})^{-1}$ | `AbelBasis.pT[n, r, R]`, `AbelBasis.pT_inv[n, R, r]` |
-| $I_{n\rho} = \sum_j (p^{T})^{-1}_{\rho j;n} \sum_i H_{jni}\, d_{ij}$ | `get_angular_intensity(d)` → `I_n` |
+| $I_{n\rho} = \sum_j (p^{T})^{-1}_{\rho j;n} \sum_i H_{jni} d_{ij}$ | `get_angular_intensity(d)` → `I_n` |
 | $C$, $C^{-1}$ | `AbelBasis.C`, `AbelBasis.C_inv`; `get_legendre_coefficients(I_n)` |
 | $I(\rho) = 4\pi\rho^2 L_{0}$, $\beta_n = L_n/L_0$ | `AbelResult.intensity`, `AbelResult.beta` |
 

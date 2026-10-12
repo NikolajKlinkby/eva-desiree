@@ -265,7 +265,7 @@ position, and can remove that dependence.
 **The model.** Inside the coincidence window the corrected electron position is
 
 $$
-\mathbf r_\mathrm{corr} = \mathbf r_e - M\,\mathbf r_n - f(\tau) - \mathbf d ,
+\mathbf r_\mathrm{corr} = \mathbf r_e - M\mathbf r_n - f(\tau) - \mathbf d ,
 $$
 
 where $\mathbf r_e$ is the electron hit position, $\mathbf r_n$ the neutral hit position (coupled through the $2\times2$
@@ -280,8 +280,8 @@ so only true coincidences determine $M$ and $f$.
 | dt range, bin width | the window of the position-vs-dt plots |
 | subtract accidentals in the means | each bin counts its pairs $+1$ and the same bin shifted by each control window $-1/K$ |
 | electron detector | which detector is corrected (default A) |
-| neutral position ($M$) | include the $M\,\mathbf r_n$ term |
-| dt polynomial order | 0 = none, 1 = $c\,\tau$, higher orders are shrunk slightly so they stay stable |
+| neutral position ($M$) | include the $M\mathbf r_n$ term |
+| dt polynomial order | 0 = none, 1 = $c\tau$, higher orders are shrunk slightly so they stay stable |
 | weighted fit | subtract accidentals in the fit |
 | apply Sum / time cuts of tab 1 | only pairs whose two events pass the cuts |
 | show corrected position (dashed) | the means after the correction; a trend left over is the residual dt dependence |
@@ -408,7 +408,7 @@ s.polar.clear_circ("a")                         # forget it
 *What you see* (page "Abel inversion"): the radial bins $d_n(r)$ (order $n$ = power of $\cos\theta$), the intensity
 
 $$
-I(\rho) = 4\pi\rho^2\,L_0(\rho)
+I(\rho) = 4\pi\rho^2L_0(\rho)
 $$
 
 in counts per unit radius, and the anisotropy parameters
@@ -592,7 +592,7 @@ off.stop()
 $2c$, and the peak is refined with a parabola. Automatic (live) or manual / locked.
 
 **Circularisation** (on request, never on every update). A stretch factor $s$ per angular bin (events move
-$r \to s\,r$) is fitted on the polar histogram. The reference slice defines two mirror planes; the first quadrant is fixed
+$r \to sr$) is fitted on the polar histogram. The reference slice defines two mirror planes; the first quadrant is fixed
 by chaining each bin to its predecessor, and all other bins are matched to their mirror image in that quadrant.
 Safeguards you can switch off: a limit on the change per bin, optional smoothing onto $\cos(2n\varphi)$ harmonics, a fit
 similarity per bin and a count of bins stuck at the search limits.
