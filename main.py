@@ -1,4 +1,4 @@
-"""EVA: Electron–neutral VMI Analysis: start the GUI.
+"""EVA: Electron-neutral VMI Analysis: start the GUI.
 
   python main.py                              # then pick a folder and press Start
   python main.py --dir /path/to/daq/output --a 3 --b 2 --start
@@ -23,6 +23,8 @@ def main():
     ap.add_argument("--speed", type=float, default=2.0, help="demo replay speed factor")
     ap.add_argument("--start", action="store_true", help="start the pipeline immediately")
     ap.add_argument("--theme", choices=["dark", "light"], default="dark", help="colour theme")
+    ap.add_argument("--no-desktop-entry", action="store_true",
+                    help="Linux: do not write the EVA menu entry and icon to ~/.local/share")
     args = ap.parse_args()
 
     try:
@@ -32,8 +34,13 @@ def main():
         sys.exit(f"{exc}\nInstall the GUI dependencies with:  pip install PyQt6 pyqtgraph numpy")
     from gui.main_window import MainWindow
     from gui.theme import apply_theme
+    from gui import app_icon
 
+    if not args.no_desktop_entry:
+        app_icon.install_linux_desktop_entry(Path(__file__))   # Wayland takes the icon from this
+    app_icon.set_windows_app_id()                # before the QApplication: own taskbar icon on Windows
     app = QtWidgets.QApplication(sys.argv)
+    app_icon.setup_app_icon(app)                 # window / taskbar / Dock icon, Wayland app id
     apply_theme(app, args.theme)                 # before any window: pyqtgraph reads it at creation
     win = MainWindow(directory=args.dir, det_a=args.a, det_b=args.b, bins=args.bins,
                      demo_speed=args.speed)
