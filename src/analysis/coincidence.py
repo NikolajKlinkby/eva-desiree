@@ -453,6 +453,11 @@ class CoincidenceFilter(Poller):
     def update(self, snap) -> int:
         sa, sb = snap.detectors.get(self.det_a), snap.detectors.get(self.det_b)
         if sa is None or sb is None or sa.n == 0 or sb.n == 0:
+            miss = [str(d) for d, s in ((self.det_a, sa), (self.det_b, sb)) if s is None or s.n == 0]
+            msg = "waiting for data of detector " + ", ".join(miss)
+            if msg != getattr(self, "_wait_msg", None):
+                self._wait_msg = msg
+                self._publish(sa.n if sa else 0, sb.n if sb else 0, msg)
             return 0
         sig = (snap.run, sa.epoch, sb.epoch)
         if sig != self._sig:
@@ -467,7 +472,8 @@ class CoincidenceFilter(Poller):
         TA, TB = synA[stA], synB[stB]
 
         if self._O is None and not self._init_offset(TA, TB, stA, stB, evA, evB):
-            self._publish(nA, nB, "aligning cycles (need more data / clear peak)")
+            self._publish(nA, nB, f"aligning cycles: {len(TA) - 1} (A) / {len(TB) - 1} (B) complete cycles, "
+                                  "need more data / a clear peak")
             return 0
         self._match(TA, TB)
         n_new = self._process(evA, evB, stA, stB, TA, TB, nA, nB)
@@ -499,10 +505,11 @@ class CoincidenceFilter(Poller):
         if min(ca, cb) < (2 if forced else self.init_blocks):
             return False
         shifts = [self.cycle_shift] if forced else range(-self.max_shift, self.max_shift + 1)
-        W_us, scores = self.W * 1e6, {}
+        W_us, scores, nblk = self.W * 1e6, {}, {}
         for s in shifts:
             i0 = max(0, -s)
             i1 = min(ca, cb - s, i0 + 60)
+            nblk[s] = max(i1 - i0, 0)
             if i1 - i0 < 2:
                 scores[s] = 0
                 continue
@@ -518,19 +525,27 @@ class CoincidenceFilter(Poller):
         if forced:
             best = self.cycle_shift
         else:
-            ranked = sorted(scores.items(), key=lambda kv: -kv[1])
-            best, top = ranked[0]
-            second = ranked[1][1] if len(ranked) > 1 else 0
+            valid = [s for s in scores if nblk[s] >= 2]
+            if len(valid) < 2:
+                return False
+            ranked = sorted(valid, key=lambda s: -scores[s])
+            best = ranked[0]
+            top = scores[best]
+            others = np.array([scores[s] for s in valid if s != best], float)
+            second = others.max()
             if top < 20:
                 return False
-            if top < 3 * max(second, 5):
-                # The laser structure is the same in every cycle, so every shift shows
-                # it and the shifts cannot be told apart. Both detectors start together,
-                # so take the shift closest to 0 and say so in the status.
-                spread = np.array(list(scores.values()), float)
-                if spread.min() < 0.5 * top:
-                    return False                     # a few shifts stand out: not clear yet
-                best = min((s for s in scores if scores[s] >= 0.5 * top), key=abs)
+            z = (top - others.mean()) / max(others.std(), 1.0)
+            if top >= 2 * max(second, 5) or z >= 6:
+                pass                                  # one shift stands out clearly
+            else:
+                # Not clear. If every shift shows the same structure (per cycle used) the laser
+                # structure is the same in every cycle and the shifts cannot be told apart. Both
+                # detectors start together, so take the shift closest to 0 and say so in the status.
+                per = {s: scores[s] / nblk[s] for s in valid}
+                if min(per.values()) < 0.5 * max(per.values()):
+                    return False                      # not clear yet: wait for more data
+                best = min(valid, key=abs)
                 self.cycle_shift_ambiguous = True
         i0 = max(0, -best)
         self._O = TA[i0] - TB[i0 + best]
