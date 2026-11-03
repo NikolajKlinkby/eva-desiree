@@ -98,6 +98,8 @@ updating. `python examples/01_online_analysis.py` is a complete script for that.
 | Control | Meaning | `SessionConfig` field |
 |---|---|---|
 | folder / `browse...` | folder with the DAQ files | `directory` |
+| `run file...` | pick any DAQ file `RA<det>_<date>.<time>.csv` (any detector): its folder and run are taken over, and the detectors of that run are filled in | `directory`, `run` |
+| run | `newest` follows the newest run of the folder; or fix one run by its stamp `<date>.<time>`, e.g. to analyse an earlier run while the DAQ keeps writing | `run` (`"latest"` or a stamp) |
 | detector A / B | A is filtered and imaged first (usually the electron detector), B is its partner | `det_a`, `det_b` |
 | run | `latest` or a run stamp such as `20260624.130138` | `run` |
 | search window | half-width of the pair search in dt | `search_window_us` |

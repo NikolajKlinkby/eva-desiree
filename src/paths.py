@@ -15,3 +15,21 @@ def scan_detectors(directory):
     if not d.is_dir():
         return []
     return sorted({int(m[1]) for f in d.iterdir() if (m := _RUN_FILE.match(f.name))})
+
+
+def parse_run_file(path):
+    """(directory, run stamp, detector number) of a DAQ file RA<det>_<date>.<time>.csv, else None."""
+    p = Path(path)
+    m = _RUN_FILE.match(p.name)
+    return (str(p.parent), m[2], int(m[1])) if m else None
+
+
+def scan_runs(directory):
+    """{run stamp: sorted detector numbers} of all DAQ runs in a directory (empty if none)."""
+    d = Path(directory)
+    runs = {}
+    if d.is_dir():
+        for f in d.iterdir():
+            if m := _RUN_FILE.match(f.name):
+                runs.setdefault(m[2], set()).add(int(m[1]))
+    return {r: sorted(v) for r, v in sorted(runs.items())}

@@ -20,7 +20,7 @@ from gui import gui_state
 from gui.tab_coincidence import CoincidenceTab
 from gui.tab_detectors import DetectorsTab
 from gui.tab_polar import AnalysisTab
-from paths import EXAMPLE_DATA, scan_detectors
+from paths import EXAMPLE_DATA, parse_run_file, scan_detectors, scan_runs
 from session import Session, SessionConfig
 from storage import capture, h5file
 from storage.saver import Saver
@@ -46,6 +46,12 @@ class MainWindow(QtWidgets.QMainWindow):
         # ---- data source strip ----
         self.dir_edit = QtWidgets.QLineEdit(str(directory))
         self.browse = QtWidgets.QPushButton("browse...")
+        self.file_btn = QtWidgets.QPushButton("run file...")
+        self.file_btn.setToolTip("Pick any DAQ file (RA<det>_<date>.<time>.csv, any detector): its folder and run are\n"
+                                 "taken over, and all detector files of that run are analysed.")
+        self.run_combo = QtWidgets.QComboBox()
+        self.run_combo.setToolTip("Which run of the folder to analyse: the newest one (follows new runs while the DAQ\n"
+                                  "writes them) or one fixed run, given by the stamp <date>.<time> of its files.")
         self.det_a = QtWidgets.QSpinBox(); self.det_a.setRange(1, 999); self.det_a.setValue(det_a)
         self.det_b = QtWidgets.QSpinBox(); self.det_b.setRange(1, 999); self.det_b.setValue(det_b)
         self.demo = QtWidgets.QCheckBox("demo")
@@ -53,6 +59,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.speed.setValue(demo_speed); self.speed.setSuffix(" x")
         self.start_btn = QtWidgets.QPushButton("Start")
         self.browse.clicked.connect(lambda *_: self._browse())
+        self.file_btn.clicked.connect(lambda *_: self._browse_file())
+        self.dir_edit.editingFinished.connect(lambda *_: self._refresh_runs())
         self.demo.toggled.connect(self._demo_toggled)
         self.start_btn.clicked.connect(lambda *_: self._toggle())
 
@@ -60,6 +68,9 @@ class MainWindow(QtWidgets.QMainWindow):
         strip.addWidget(QtWidgets.QLabel("data folder"))
         strip.addWidget(self.dir_edit, 1)
         strip.addWidget(self.browse)
+        strip.addWidget(self.file_btn)
+        strip.addWidget(QtWidgets.QLabel("run"))
+        strip.addWidget(self.run_combo)
         strip.addWidget(QtWidgets.QLabel("A (filtered) det"))
         strip.addWidget(self.det_a)
         strip.addWidget(QtWidgets.QLabel("B (partner) det"))
@@ -120,6 +131,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.timer.setInterval(REFRESH_MS)
         self.timer.timeout.connect(self._tick)
         self.timer.start()
+        self._refresh_runs()
         self.save_timer = QtCore.QTimer(self)
         self.save_timer.setInterval(1000)
         self.save_timer.timeout.connect(self._save_tick)
@@ -130,9 +142,46 @@ class MainWindow(QtWidgets.QMainWindow):
         d = QtWidgets.QFileDialog.getExistingDirectory(self, "data folder", self.dir_edit.text())
         if d:
             self.dir_edit.setText(d)
+            self._refresh_runs()
+
+    def _browse_file(self):
+        start = self.dir_edit.text() if os.path.isdir(self.dir_edit.text()) else str(Path.cwd())
+        f, _ = QtWidgets.QFileDialog.getOpenFileName(self, "DAQ file of the run to analyse", start,
+                                                     "DAQ files (RA*.csv);;all files (*)")
+        if f:
+            self.open_run_file(f)
+
+    def open_run_file(self, path):
+        """Take over folder and run of a DAQ file RA<det>_<date>.<time>.csv (any detector of the run)."""
+        info = parse_run_file(path)
+        if info is None:
+            QtWidgets.QMessageBox.warning(self, "run file", "The file name must look like RA<det>_<date>.<time>.csv")
+            return False
+        folder, run, det = info
+        self.dir_edit.setText(folder)
+        self._refresh_runs(select=run)
+        dets = scan_runs(folder).get(run, [det])
+        if self.det_a.value() not in dets or self.det_b.value() not in dets:   # keep the choice when it fits this run
+            a = det if det in dets else dets[-1]
+            others = [d for d in dets if d != a]
+            self.det_a.setValue(a)
+            if others:
+                self.det_b.setValue(others[-1] if others[-1] != a else others[0])
+        return True
+
+    def _refresh_runs(self, select=None):
+        """List the runs found in the data folder; keeps the current choice when it still exists."""
+        keep = select or self.run_combo.currentData()
+        runs = scan_runs(self.dir_edit.text())
+        self.run_combo.clear()
+        self.run_combo.addItem("newest (follow)", "latest")
+        for run in sorted(runs, reverse=True):
+            self.run_combo.addItem(f"{run}   (det {', '.join(str(d) for d in runs[run])})", run)
+        i = self.run_combo.findData(keep) if keep else 0
+        self.run_combo.setCurrentIndex(max(i, 0))
 
     def _demo_toggled(self, on):
-        for w in (self.dir_edit, self.browse):
+        for w in (self.dir_edit, self.browse, self.file_btn, self.run_combo):
             w.setEnabled(not on)
         if on:
             dets = scan_detectors(EXAMPLE_DATA)
@@ -239,7 +288,8 @@ class MainWindow(QtWidgets.QMainWindow):
                      det_b=self.det_b.value(), bins=self._bins)
             cfg = SessionConfig(**c)
         else:
-            cfg = SessionConfig(directory=self.dir_edit.text(), det_a=self.det_a.value(),
+            cfg = SessionConfig(directory=self.dir_edit.text(), run=self.run_combo.currentData() or "latest",
+                                det_a=self.det_a.value(),
                                 det_b=self.det_b.value(), bins=self._bins,
                                 demo_source=str(EXAMPLE_DATA) if demo else None,
                                 demo_speed=self.speed.value())
@@ -265,7 +315,7 @@ class MainWindow(QtWidgets.QMainWindow):
             except Exception:
                 pass
         self.start_btn.setText("Stop")
-        for w in (self.det_a, self.det_b, self.demo, self.speed, self.dir_edit, self.browse):
+        for w in (self.det_a, self.det_b, self.demo, self.speed, self.dir_edit, self.browse, self.file_btn, self.run_combo):
             w.setEnabled(False)
 
     def stop(self):

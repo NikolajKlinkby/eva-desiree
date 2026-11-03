@@ -2,6 +2,7 @@
 
   python main.py                              # then pick a folder and press Start
   python main.py --dir /path/to/daq/output --a 3 --b 2 --start
+  python main.py --file /path/RA003_20261103.124305.csv --a 3 --b 2   # one run, picked by any of its files
   python main.py --demo                       # replay examples/test_data, no hardware needed
 
 Requires:  pip install PyQt6 pyqtgraph numpy
@@ -16,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dir", default=".", help="folder the DAQ writes RA<det>_<date>.<time>.csv into")
+    ap.add_argument("--file", help="any DAQ file RA<det>_<date>.<time>.csv: its folder and run are analysed")
     ap.add_argument("--a", type=int, default=3, help="detector to filter/image first (e.g. VMI)")
     ap.add_argument("--b", type=int, default=1, help="partner detector (e.g. RAEA)")
     ap.add_argument("--bins", type=int, default=256, help="image size in pixels")
@@ -45,6 +47,8 @@ def main():
     win = MainWindow(directory=args.dir, det_a=args.a, det_b=args.b, bins=args.bins,
                      demo_speed=args.speed)
     win.show()
+    if args.file and not win.open_run_file(args.file):
+        sys.exit(f"not a DAQ file (RA<det>_<date>.<time>.csv): {args.file}")
     if args.demo:
         win.demo.setChecked(True)
     if args.demo or args.start:

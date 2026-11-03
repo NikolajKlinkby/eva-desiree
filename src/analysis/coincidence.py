@@ -45,11 +45,19 @@ EVT, SYN = "Event time", "Sync Time"
 
 
 # ------------------------------------------------------------------ helpers
-def block_starts(sync):
-    """Row index where each constant-Sync-Time block (cycle) starts."""
+def block_starts(sync, jitter_frac=0.25):
+    """Row index where each cycle (block of one Sync Time) starts.
+
+    The Sync Time is constant within a cycle, except that electronics noise bursts
+    can make it creep by a few us from row to row. Such creep must not start a new
+    cycle: a step only counts when it exceeds `jitter_frac` of the typical cycle
+    step (the median of the steps above 1 ms)."""
     if len(sync) == 0:
         return np.empty(0, np.int64)
-    return np.r_[0, np.flatnonzero(np.diff(sync) != 0) + 1]
+    d = np.diff(sync)
+    big = d[d > 1e-3]
+    thr = jitter_frac * np.median(big) if len(big) else 0.0
+    return np.r_[0, np.flatnonzero(d > thr) + 1]
 
 
 def find_pairs(t_ref, t_oth, w):
@@ -444,7 +452,11 @@ class CoincidenceFilter(Poller):
             return 0
         self._match(TA, TB)
         n_new = self._process(evA, evB, stA, stB, TA, TB, nA, nB)
-        self._publish(nA, nB, "running" if len(self._mTA) >= 2 else "waiting for pulses")
+        self._publish(nA, nB, ("running" if len(self._mTA) >= 2 else "waiting for pulses")
+                      + (" (cycle shift not determinable: assumed 0)" if self.cycle_shift_ambiguous
+                         and self.cycle_shift_found == 0 else
+                         " (cycle shift not determinable: assumed %+d)" % self.cycle_shift_found
+                         if self.cycle_shift_ambiguous else ""))
         return n_new
 
     # ----------------------------------------------------------- internals
@@ -459,6 +471,7 @@ class CoincidenceFilter(Poller):
         self._cov_a = np.zeros(1 << 16, bool)
         self._cov_b = np.zeros(1 << 16, bool)
         self.cycle_shift_found = None
+        self.cycle_shift_ambiguous = False
 
     def _init_offset(self, TA, TB, stA, stB, evA, evB):
         """Find which B pulse corresponds to which A pulse (integer shift)."""
@@ -489,8 +502,17 @@ class CoincidenceFilter(Poller):
             ranked = sorted(scores.items(), key=lambda kv: -kv[1])
             best, top = ranked[0]
             second = ranked[1][1] if len(ranked) > 1 else 0
-            if top < 20 or top < 3 * max(second, 5):
+            if top < 20:
                 return False
+            if top < 3 * max(second, 5):
+                # The laser structure is the same in every cycle, so every shift shows
+                # it and the shifts cannot be told apart. Both detectors start together,
+                # so take the shift closest to 0 and say so in the status.
+                spread = np.array(list(scores.values()), float)
+                if spread.min() < 0.5 * top:
+                    return False                     # a few shifts stand out: not clear yet
+                best = min((s for s in scores if scores[s] >= 0.5 * top), key=abs)
+                self.cycle_shift_ambiguous = True
         i0 = max(0, -best)
         self._O = TA[i0] - TB[i0 + best]
         self._next_i, self._last_j = i0, i0 + best - 1

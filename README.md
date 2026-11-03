@@ -38,6 +38,7 @@ pip install -r requirements.txt                      # numpy, scipy, pandas, h5p
 python main.py --demo                                # replay examples/test_data, no hardware needed
 python main.py --demo --theme light                  # dark is the default
 python main.py --dir <daq folder> --a 3 --b 1 --start    # your own data: detector A (electrons) and B (neutrals)
+python main.py --file <RA003_..csv> --a 3 --b 2 --start  # one run, picked by any of its files
 python main.py                                       # or pick everything in the window
 ```
 
