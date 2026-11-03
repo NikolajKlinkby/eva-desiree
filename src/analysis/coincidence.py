@@ -153,6 +153,8 @@ class CoincidenceResult:
     pulses_a: np.ndarray = None  # matched sync pulses on each detector's own clock [s]
     pulses_b: np.ndarray = None  # (offset = pulses_a - pulses_b shows the clock drift)
     n_sigma: float = 3.0         # half-width of the automatic window, in peak sigmas
+    dt_offset_us: float = 0.0    # dt = t_B - t_A - offset: the search is centred on this raw dt [us]
+    peak_range_us: float = None  # the automatic window looks for the peak within +- this [us]; None = half a shot
     _cache: dict = field(default_factory=dict, init=False, repr=False, compare=False)
 
     def restrict(self, keep):
@@ -184,9 +186,9 @@ class CoincidenceResult:
         if len(dt) < 50:
             return None
         nb = 200
-        # The main peak is the tallest feature within +-half a shot of zero.
+        # The main peak is the tallest feature within +-half a shot of zero (or +-peak_range_us).
         P0 = self.shot_period_guess_us
-        R = min(W, 0.5 * P0)
+        R = min(W, 0.5 * P0 if not self.peak_range_us else self.peak_range_us)
         counts, edges = np.histogram(dt, bins=nb, range=(-R, R))
         bw = 2 * R / nb
         bkg = np.median(counts) / bw
@@ -196,7 +198,9 @@ class CoincidenceResult:
         for _ in range(6):
             r = _peak_fwhm(dt, c, half, 100, bkg)
             if r is None:
-                return None
+                # no peak shape in the range (a step or a shoulder, or too little data): with an
+                # explicit peak range sit the window on dt = 0 and let the user drag it
+                return (0.0, R / 6) if self.peak_range_us else None
             c, fwhm, touches = r
             res = (c, fwhm / 2.3548)
             if touches:
@@ -363,11 +367,13 @@ class CoincidenceFilter(Poller):
     cycle_shift       force B pulse index = A pulse index + shift (None = auto)
     match_tol         max clock-offset change between pulses to still match [s]
     lag_margin        events may precede their Sync Time by this much [s]
+    dt_offset_us      centre of the search: dt = t_B - t_A - dt_offset_us. Moves another peak of the
+                      dt distribution (e.g. a neighbouring laser shot) to dt = 0
     """
     def __init__(self, source, det_a, det_b, search_window_us=2500.0,
                  shot_period_us=1000.0, window_us=None, bkg_shots=(-2, -1, 1, 2),
                  cycle_shift=None, max_shift=10, init_blocks=8, match_tol=1e-3,
-                 lag_margin=0.1):
+                 lag_margin=0.1, dt_offset_us=0.0):
         self.source, self.det_a, self.det_b = source, det_a, det_b
         self.W = search_window_us * 1e-6
         self.shot_period_us, self.bkg_shots = shot_period_us, tuple(bkg_shots)
@@ -375,7 +381,9 @@ class CoincidenceFilter(Poller):
         self.cycle_shift = cycle_shift
         self.max_shift, self.init_blocks = max_shift, init_blocks
         self.match_tol, self.lag_margin = match_tol, lag_margin
+        self.offset = float(dt_offset_us) * 1e-6
         self.auto_n_sigma = 3.0
+        self.peak_range_us = None
         self.cycle_shift_found = None
         self._result, self._version, self._rc = None, 0, (None, None)
         self._reset(None)
@@ -392,6 +400,12 @@ class CoincidenceFilter(Poller):
         e.g. (-1, 1) or (-2, -1, 1, 2). Takes effect immediately."""
         self.bkg_shots = tuple(int(k) for k in shots)
 
+    def set_peak_range(self, range_us):
+        """The automatic window takes the tallest feature within +- range_us of dt = 0 (None or 0:
+        half a shot). Use a small range after a dt offset, so that a weaker peak at 0 wins over a
+        taller one further away."""
+        self.peak_range_us = float(range_us) if range_us else None
+
     def set_auto_sigma(self, n_sigma):
         """Half-width of the automatic window in units of the peak sigma."""
         self.auto_n_sigma = float(n_sigma)
@@ -400,15 +414,20 @@ class CoincidenceFilter(Poller):
         """Nominal period [us] of the periodic structure (refined from the data)."""
         self.shot_period_us = float(period_us)
 
-    def reconfigure(self, search_window_us=None, cycle_shift="keep"):
+    def reconfigure(self, search_window_us=None, cycle_shift="keep", dt_offset_us=None):
         """Change settings that need a full re-search (search window, forced cycle
-        shift; None = auto). Stop the worker thread first, then start it again."""
+        shift; None = auto, dt offset; None = keep). Stop the worker thread first, then start it again."""
         if self.running:
             raise RuntimeError("stop() the filter before reconfigure()")
         if search_window_us is not None:
             self.W = float(search_window_us) * 1e-6
         if cycle_shift != "keep":
             self.cycle_shift = cycle_shift
+        if dt_offset_us is not None:
+            new = float(dt_offset_us) * 1e-6
+            if abs(new - self.offset) > 1e-12:
+                self._window = None             # a manual window sat on the old peak: pick the window again
+            self.offset = new
         self._reset(None)
         self._rc = (None, None)
 
@@ -416,11 +435,11 @@ class CoincidenceFilter(Poller):
         r = self._result
         if r is None:
             return None
-        key = (r.version, self._window, self.bkg_shots, self.shot_period_us, self.auto_n_sigma)
+        key = (r.version, self._window, self.bkg_shots, self.shot_period_us, self.auto_n_sigma, self.peak_range_us)
         if self._rc[0] != key:               # one object per key so cached
             r2 = dataclasses.replace(r, bkg_shots=self.bkg_shots,     # peak/period are reused
                                      shot_period_guess_us=self.shot_period_us,
-                                     n_sigma=self.auto_n_sigma)
+                                     n_sigma=self.auto_n_sigma, peak_range_us=self.peak_range_us)
             w = self._window if self._window is not None else r2.suggest_window()
             r3 = dataclasses.replace(r2, window_us=w, window_auto=self._window is None)
             r3._cache.update(r2._cache)
@@ -564,9 +583,9 @@ class CoincidenceFilter(Poller):
         m = (ev >= lo) & (ev < hi)
         iA, tA = r0 + np.flatnonzero(m), ev[m]
         # B events (mapped to the A clock) that can pair with them
-        r0 = self._scan_start(TB, stB, lo - W - self._O)
+        r0 = self._scan_start(TB, stB, lo - W - self._O + self.offset)
         ev = evB[r0:nB]
-        tau = np.interp(ev, mTB, mTA, left=np.nan, right=np.nan)
+        tau = np.interp(ev, mTB, mTA, left=np.nan, right=np.nan) - self.offset   # dt is relative to the offset
         m = (tau >= lo - W) & (tau < hi + W)          # NaN compares False
         iB, tB = r0 + np.flatnonzero(m), tau[m]
 
@@ -598,4 +617,4 @@ class CoincidenceFilter(Poller):
             n_matched=len(self._mTA), n_unmatched_a=self.n_unmatched_a,
             search_window_us=self.W * 1e6, shot_period_guess_us=self.shot_period_us,
             bkg_shots=self.bkg_shots, pulses_a=np.asarray(self._mTA),
-            pulses_b=np.asarray(self._mTB))
+            pulses_b=np.asarray(self._mTB), dt_offset_us=self.offset * 1e6)

@@ -36,6 +36,7 @@ class SessionConfig:
     det_b: int = 1                  # partner detector (e.g. RAEA)
     run: str = "latest"
     search_window_us: float = 2500.0
+    dt_offset_us: float = 0.0       # centre of the coincidence search: dt = t_B - t_A - offset
     shot_period_us: float = 1000.0
     bins: int = 256
     poll_interval: float = 0.2
@@ -76,7 +77,7 @@ class Session:
         if self.ds is None:
             self.ds = DetectorSet(self.directory, run=c.run)
         self.flt = CoincidenceFilter(self.ds, c.det_a, c.det_b, search_window_us=c.search_window_us,
-                                     shot_period_us=c.shot_period_us)
+                                     shot_period_us=c.shot_period_us, dt_offset_us=c.dt_offset_us)
         self.sel = SelectionFilter(self.ds, self.flt)
         self.pos = PositionCorrector(self.ds, self.flt, self.sel)
         self.img = Imager(self.ds, self.sel, binning=CartesianBinning(c.bins, c.bins), corrector=self.pos)
@@ -100,11 +101,11 @@ class Session:
             shutil.rmtree(self._tmp, ignore_errors=True)
         self.ds = self.flt = self.sel = self.pos = self.img = self.polar = self.abel = self._proc = self._tmp = None
 
-    def restart_coincidence(self, search_window_us=None, cycle_shift="keep"):
+    def restart_coincidence(self, search_window_us=None, cycle_shift="keep", dt_offset_us=None):
         """Apply settings that need a full re-search (search window, forced cycle
-        shift; None = auto). The other stages keep running meanwhile."""
+        shift; None = auto; dt offset). The other stages keep running meanwhile."""
         self.flt.stop()
-        self.flt.reconfigure(search_window_us=search_window_us, cycle_shift=cycle_shift)
+        self.flt.reconfigure(search_window_us=search_window_us, cycle_shift=cycle_shift, dt_offset_us=dt_offset_us)
         self.flt.start(self.config.poll_interval)
 
     # -- read side --------------------------------------------------------

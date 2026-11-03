@@ -212,9 +212,11 @@ window shifted by whole laser-shot periods (default ±1, ±2).
 | Control | Meaning | Call |
 |---|---|---|
 | search window, cycle shift | re-searches everything | `s.restart_coincidence(search_window_us=..., cycle_shift=...)` |
+| dt offset | re-searches everything; centres the search on another peak: $\mathrm{dt} = t_B - t_A - \text{offset}$ | `s.restart_coincidence(dt_offset_us=-1000.0)` |
 | nominal period | refined from the data | `s.flt.set_shot_period(us)` |
 | control windows | which shifts are used | `s.flt.set_bkg_shots((-2, -1, 1, 2))` |
 | automatic window width | in peak sigmas | `s.flt.set_auto_sigma(3.0)` |
+| peak search $\pm$ | the automatic window sits on the tallest feature within this range of $\mathrm{dt}=0$ (default: half a shot). After a dt offset use a small range, e.g. 40 µs; if there is no peak shape (a step or shoulder) the window is put on $\mathrm{dt}=0$ for you to drag | `s.flt.set_peak_range(40.0)` |
 | manual window | | `s.flt.set_window(lo, hi)` / `s.flt.clear_window()` |
 
 **In code**

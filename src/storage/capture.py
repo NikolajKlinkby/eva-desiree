@@ -14,7 +14,8 @@ def coincidence_settings(flt):
             "window_us": flt._window,                     # None = automatic
             "auto_n_sigma": flt.auto_n_sigma, "cycle_shift": flt.cycle_shift,
             "cycle_shift_found": flt.cycle_shift_found, "match_tol": flt.match_tol, "lag_margin": flt.lag_margin,
-            "max_shift": flt.max_shift}
+            "max_shift": flt.max_shift, "dt_offset_us": flt.offset * 1e6,
+            "peak_range_us": flt.peak_range_us}
 
 
 def stage_settings(session):
@@ -39,10 +40,12 @@ def apply_settings(session, saved, running):
     c = saved.get("coincidence")
     if c and s.flt is not None:
         if not running:
-            s.flt.reconfigure(search_window_us=c.get("search_window_us"), cycle_shift=c.get("cycle_shift"))
+            s.flt.reconfigure(search_window_us=c.get("search_window_us"), cycle_shift=c.get("cycle_shift"),
+                                dt_offset_us=c.get("dt_offset_us"))
         s.flt.set_shot_period(c["shot_period_us"])
         s.flt.set_bkg_shots(c["bkg_shots"])
         s.flt.set_auto_sigma(c["auto_n_sigma"])
+        s.flt.set_peak_range(c.get("peak_range_us"))
         if c.get("window_us") is None:
             s.flt.clear_window()
         else:

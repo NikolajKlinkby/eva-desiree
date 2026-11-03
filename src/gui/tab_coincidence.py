@@ -29,12 +29,18 @@ class CoincidenceTab(QtWidgets.QWidget):
         super().__init__()
         self.session = None
         self._last = None
+        self._offset_applied = 0.0
         self._busy = False
         self._pos_t, self._pos_dur = 0.0, 0.0
 
         # ---------------- controls (left) ----------------
         # search: need a full re-search
         self.search = spin(100, 1e6, 2500.0, step=100, decimals=0, suffix=" us")
+        self.offset = spin(-1e6, 1e6, 0.0, step=10, decimals=1, suffix=" us")
+        self.offset.setToolTip("Centre of the search: dt = t_B - t_A - offset. Enter the dt of another peak\n"
+                               "(e.g. a neighbouring laser shot, +-1000 us) to move it to dt = 0 and analyse it.\n"
+                               "A peak seen at dt = -200 us needs the offset -200. The window becomes automatic again;\n"
+                               "the window, accidentals and everything downstream then refer to that peak.")
         self.shift_auto = QtWidgets.QCheckBox("auto")
         self.shift_auto.setChecked(True)
         self.shift = QtWidgets.QSpinBox()
@@ -50,6 +56,7 @@ class CoincidenceTab(QtWidgets.QWidget):
         row.addWidget(self.shift_auto)
         row.addWidget(self.shift)
         f1.addRow("cycle shift B-A", row)
+        f1.addRow("dt offset", self.offset)
         f1.addRow(self.apply_btn)
 
         # beam structure / accidentals: live
@@ -75,12 +82,18 @@ class CoincidenceTab(QtWidgets.QWidget):
         self.tmax.setEnabled(False)
         self.auto.toggled.connect(self._auto_toggled)
         self.sigma.valueChanged.connect(self._sigma_changed)
+        self.peak_range = spin(0, 5000, 0, step=10, decimals=0, suffix=" us")
+        self.peak_range.setSpecialValueText("half a shot")
+        self.peak_range.setToolTip("The automatic window sits on the tallest feature within +- this range of dt = 0.\n"
+                                   "After a dt offset, a small range (e.g. 30 us) makes a weaker peak at 0 win.")
+        self.peak_range.valueChanged.connect(lambda v: self.flt.set_peak_range(v) if self.flt is not None else None)
         self.tmin.valueChanged.connect(lambda v: self._typed(lo=v))
         self.tmax.valueChanged.connect(lambda v: self._typed(hi=v))
         g3 = CollapsibleSection("coincidence window  (dt = t_B - t_A)", True)
         f3 = g3.form
         f3.addRow(self.auto)
         f3.addRow("auto half-width", self.sigma)
+        f3.addRow("peak search +-", self.peak_range)
         f3.addRow("min", self.tmin)
         f3.addRow("max", self.tmax)
 
@@ -278,10 +291,13 @@ class CoincidenceTab(QtWidgets.QWidget):
     # -- session -------------------------------------------------------------
     def attach(self, session):
         self.session, self._last = session, None
+        set_quiet(self.offset, session.flt.offset * 1e6)
+        self._offset_applied = self.offset.value()
         self._push_pos()
         self._period_changed(self.period.value())
         self._shots_changed(self.shots.currentIndex())
         self._sigma_changed(self.sigma.value())
+        session.flt.set_peak_range(self.peak_range.value())
         if self.auto.isChecked():
             session.flt.clear_window()
         else:
@@ -299,7 +315,14 @@ class CoincidenceTab(QtWidgets.QWidget):
         if self.session is None:
             return
         shift = None if self.shift_auto.isChecked() else int(self.shift.value())
-        self.session.restart_coincidence(search_window_us=self.search.value(), cycle_shift=shift)
+        off = self.offset.value()
+        if abs(off - self._offset_applied) > 1e-9:       # the old manual window sat on the old peak
+            self._offset_applied = off
+            self.auto.setChecked(True)                   # -> automatic window (clears the manual one)
+            if off != 0 and not self.peak_range.value():
+                self.peak_range.setValue(50.0)           # look for the peak near the new zero only
+        self.session.restart_coincidence(search_window_us=self.search.value(), cycle_shift=shift,
+                                         dt_offset_us=off)
         self._last = None
 
     def _period_changed(self, v):
